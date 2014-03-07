@@ -48,6 +48,8 @@ board_setup BeagleBone
 option ImageSize 1000mb # for 2 Gigabyte card
 #option ImageSize 3900mb # for 4 Gigabyte card
 
+BEAGLEBONE_UBOOT_SRC=${TOPDIR}/u-boot-master
+
 #
 # How to Customize Your Build
 #
@@ -143,14 +145,14 @@ option ImageSize 1000mb # for 2 Gigabyte card
 #
 # Each board picks a default KERNCONF but you can override it.
 
-FREEBSD_SRC=/home/pkelsey/10-STABLE/src
+FREEBSD_SRC=/home/pkelsey/github/freebsd
 #
 # FreeBSD source that will be used for kernel, world, and ubldr.
 # This directory doesn't need to exist yet.  When you run the script,
 # it will tell you how to get appropriate sources into this directory.
 # (I find FREEBSD_SRC=${TOPDIR}/src to be useful.)
 
-WORKDIR=/home/pkelsey/10-STABLE/work
+WORKDIR=/home/pkelsey/github/freebsd-work
 #
 # You will probably never override this, but you may need to
 # understand it: WORKDIR holds all of the created and temporary files
@@ -325,7 +327,8 @@ beaglebone_multiinstall_partition_image ( ) {
 
     FAT_SIZE=2m
     disk_fat_create $FAT_SIZE -1 -1 "${LABEL_PREFIX}BOOT"
-
+    echo "FAT Partition is `disk_partition $DISK_COUNT`"
+	
     case $FAT_SIZE in
         *k) FAT_SIZE=$(( ${FAT_SIZE%?} * 1000 ))
             ;;
@@ -340,10 +343,12 @@ beaglebone_multiinstall_partition_image ( ) {
 
     while [ ${NUM_INSTALLS} -gt 0 ]; do
 	disk_ufs_create $PARTITION_SIZE
-	disk_ufs_label $DISK_UFS_COUNT "${LABEL_PREFIX}freebsd${DISK_UFS_COUNT}"
-	board_add_installworld_partition $DISK_UFS_COUNT
+	disk_ufs_label ${DISK_UFS_COUNT} "${LABEL_PREFIX}freebsd${DISK_UFS_COUNT}"
 
-	echo "UFS Partition is `disk_ufs_partition $DISK_UFS_COUNT`"
+	board_mark_partition_for_freebsd_install $DISK_COUNT
+	board_customize_partition $DISK_COUNT beaglebone_prep_fstab
+
+	echo "UFS Partition is `disk_partition $DISK_COUNT`"
 
 	NUM_INSTALLS=$(( ${NUM_INSTALLS} - 1 ))
     done
@@ -352,9 +357,15 @@ strategy_add $PHASE_PARTITION_LWW beaglebone_multiinstall_partition_image
 
 
 beaglebone_prep_fstab ( ) {
+    local ABSINDEX=$1
+    local RELINDEX
     local LABEL_PREFIX
     local UC_LABEL_PREFIX
     local DESTDIR
+
+    RELINDEX=`disk_get_var ${ABSINDEX} RELINDEX`
+
+    echo "Creating custom /etc/fstab for UFS partition ${RELINDEX}"
 
     if [ "$BEAGLEBONE_BOOT_EMMC" = "y" ]; then
 	LABEL_PREFIX=emmc
@@ -364,14 +375,12 @@ beaglebone_prep_fstab ( ) {
 
     UC_LABEL_PREFIX=`echo ${LABEL_PREFIX} | tr "[:lower:]" "[:upper:]"`
 
-    # Provide an overlay /etc/fstab that uses the filesystem labels
-    DESTDIR=${WORKDIR}/overlay/etc
-    mkdir -p ${DESTDIR} > /dev/null 2>&1
+    # Create an etc/fstab that uses the filesystem labels
     # Why is BOARDDIR cleared by board_setup?
-    sed -e "s:mmcsd[0-9]s[0-9]a:ufs/${LABEL_PREFIX}freebsd${_CURRENT_UFS_PARTITION}:" ${TOPDIR}/board/BeagleBone/overlay/etc/fstab | sed -e "s:mmcsd[0-9]s[0-9]:msdosfs/${UC_LABEL_PREFIX}BOOT:" > ${DESTDIR}/fstab
+    sed -e "s:mmcsd[0-9]s[0-9]a:ufs/${LABEL_PREFIX}freebsd${RELINDEX}:" ${TOPDIR}/board/BeagleBone/overlay/etc/fstab | sed -e "s:mmcsd[0-9]s[0-9]:msdosfs/${UC_LABEL_PREFIX}BOOT:" > etc/fstab
 
     echo "/etc/fstab:"
-    cat ${DESTDIR}/fstab
+    cat etc/fstab
 }
-PRIORITY=49 strategy_add $PHASE_FREEBSD_USER_CUSTOMIZATION beaglebone_prep_fstab
+
 
