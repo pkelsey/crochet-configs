@@ -45,7 +45,7 @@ board_setup BeagleBone
 #
 #option ImageSize 100mb # for kernel-only images
 #option ImageSize 1950mb # for 2 Gigabyte card
-option ImageSize 1000mb # for 2 Gigabyte card
+option ImageSize 1832mb # maximal eMMC image
 #option ImageSize 3900mb # for 4 Gigabyte card
 
 BEAGLEBONE_UBOOT_SRC=${TOPDIR}/u-boot-master
